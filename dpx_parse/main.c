@@ -192,6 +192,7 @@ int my_dpx_read(char *fname, char *outputBmpFile)
 	int bpp;
 	int system_is_le;
 	int data_bswap;
+	char *Data;
 
 	if ((fp = fopen(fname, "rb")) == NULL)
 	{
@@ -231,26 +232,28 @@ int my_dpx_read(char *fname, char *outputBmpFile)
 	fseek(fp, 0, SEEK_END);
 	long fileSize = ftell(fp);
 	long bytesReadSize = fileSize - image_offset;
-	printf("bytesReadSize = %d\n", bytesReadSize);
+	printf("bytesReadSize = %ld\n", bytesReadSize);
 	unsigned char *buffer = (unsigned char *)malloc(bytesReadSize);
 	fseek(fp, image_offset, SEEK_SET);
 	fread(buffer, 1, bytesReadSize, fp);
-	uint8_t *Data = (uint8_t *)malloc(w * h * 4);
+
+	BMPFileHeader fileHeader;
+	BMPInfoHeader infoHeader;
+	FILE *bmpFile;
 	switch (f.ImageHeader.ImageElement[0].Descriptor)
 	{
-	case 51:				  /* BGRA */
+	case 50:				  /* BGR */
+		Data = (char *)malloc(w * h * 3);
 		for (int y = h - 1; y >= 0; --y) {
 			for (int x = 0; x < w; ++x) {
 			// 注意：BMP是BGR顺序，所以我们需要交换R和B的位置
-				Data[(y * w + x) * 3 + 0] = buffer[((h - 1 - y) * w + x) * 4 + 2]; // B
-				Data[(y * w + x) * 3 + 1] = buffer[((h - 1 - y) * w + x) * 4 + 1]; // G
-				Data[(y * w + x) * 3 + 2] = buffer[((h - 1 - y) * w + x) * 4 + 0]; // R
+				Data[(y * w + x) * 3 + 0] = buffer[((h - 1 - y) * w + x) * 3 + 2]; // B
+				Data[(y * w + x) * 3 + 1] = buffer[((h - 1 - y) * w + x) * 3 + 1]; // G
+				Data[(y * w + x) * 3 + 2] = buffer[((h - 1 - y) * w + x) * 3 + 0]; // R
 			}
 		}
  
 		// 设置BMP文件头和信息头（注意：这里假设不使用压缩，并且图像大小是w*h*3字节）
-		BMPFileHeader fileHeader;
-		BMPInfoHeader infoHeader;
 		fileHeader.bfType = 0x4D42; // 'BM'
 		fileHeader.bfReserved1 = 0;
 		fileHeader.bfReserved2 = 0;
@@ -271,7 +274,53 @@ int my_dpx_read(char *fname, char *outputBmpFile)
 		fileHeader.bfSize = fileHeader.bfOffBits + infoHeader.biSizeImage; // 文件总大小（字节）
 	 
 		// 写入BMP文件
-		FILE *bmpFile = fopen(outputBmpFile, "wb");
+		bmpFile = fopen(outputBmpFile, "wb");
+		if (!bmpFile) {
+			fprintf(stderr, "Error: The file '%s' could not be created.\n", outputBmpFile);
+			free(Data);
+			return 1;
+		}
+	 
+		fwrite(&fileHeader, sizeof(BMPFileHeader), 1, bmpFile);
+		fwrite(&infoHeader, sizeof(BMPInfoHeader), 1, bmpFile);
+		fwrite(Data, 1, w * h * 3, bmpFile); // 写入BGR数据（没有alpha通道）
+	 
+		fclose(bmpFile);
+		free(Data);
+		break;	
+	case 51:				  /* BGRA */
+		Data = (char *)malloc(w * h * 4);
+		for (int y = h - 1; y >= 0; --y) {
+			for (int x = 0; x < w; ++x) {
+			// 注意：BMP是BGR顺序，所以我们需要交换R和B的位置
+				Data[(y * w + x) * 3 + 0] = buffer[((h - 1 - y) * w + x) * 4 + 2]; // B
+				Data[(y * w + x) * 3 + 1] = buffer[((h - 1 - y) * w + x) * 4 + 1]; // G
+				Data[(y * w + x) * 3 + 2] = buffer[((h - 1 - y) * w + x) * 4 + 0]; // R
+			}
+		}
+ 
+		// 设置BMP文件头和信息头（注意：这里假设不使用压缩，并且图像大小是w*h*3字节）
+		fileHeader.bfType = 0x4D42; // 'BM'
+		fileHeader.bfReserved1 = 0;
+		fileHeader.bfReserved2 = 0;
+		fileHeader.bfOffBits = sizeof(BMPFileHeader) + sizeof(BMPInfoHeader);
+	 
+		infoHeader.biSize = sizeof(BMPInfoHeader);
+		infoHeader.biWidth = w;
+		infoHeader.biHeight = h; // 注意：对于24位BMP，biHeight应该是正数，表示图像高度
+		infoHeader.biPlanes = 1;
+		infoHeader.biBitCount = 24; // 24位BGR
+		infoHeader.biCompression = 0; // 不压缩
+		infoHeader.biSizeImage = w * h * 3; // 图像数据大小（字节）
+		infoHeader.biXPelsPerMeter = 0; // 水平分辨率（像素/米），通常设置为0
+		infoHeader.biYPelsPerMeter = 0; // 垂直分辨率（像素/米），通常设置为0
+		infoHeader.biClrUsed = 0; // 实际使用的颜色表中的颜色数，对于24位图像通常为0
+		infoHeader.biClrImportant = 0; // 重要颜色数，对于24位图像通常为0
+	 
+		fileHeader.bfSize = fileHeader.bfOffBits + infoHeader.biSizeImage; // 文件总大小（字节）
+	 
+		// 写入BMP文件
+		bmpFile = fopen(outputBmpFile, "wb");
 		if (!bmpFile) {
 			fprintf(stderr, "Error: The file '%s' could not be created.\n", outputBmpFile);
 			free(Data);
@@ -294,7 +343,7 @@ int my_dpx_read(char *fname, char *outputBmpFile)
 
 int main()
 {
-	char *inputFile = "input.dpx";
+	char *inputFile = "input.out.dpx";
 	char *outputBmpFile = "output.bmp";
 	my_dpx_read(inputFile, outputBmpFile);
 	return 0;

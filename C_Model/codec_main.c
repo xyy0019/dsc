@@ -1317,14 +1317,19 @@ int main(int argc, char *argv[])
 	/* process input arguments */
     process_args(argc, argv, cmd_args);
 
+	printf("function = %d\n", function);
 	if (function == 3)
 	{
 		dsc_codec.native_420 = native420;
+		printf("native420 = %d\n", native420);
 		dsc_codec.native_422 = native422;
+		printf("native422 = %d\n", native422);
 		if (native422 && native420)
 			UErr("ERROR: NATIVE_420 and NATIVE_422 modes cannot both be enabled at the same time\n");
 		dsc_codec.pic_width = picWidth;
+		printf("dsc_codec.pic_width =%d\n", picWidth);
 		dsc_codec.pic_height = picHeight;
+		printf("dsc_codec.pic_height =%d\n", picHeight);
 		populate_pps(&dsc_codec, &slicew, &sliceh);
 		if (printPpsFormat == 1)
 			print_pps(stdout, &dsc_codec);
